@@ -16,13 +16,16 @@ from yolo3.utils import compose
 
 @wraps(Conv2D)
 def DarknetConv2D(*args, **kwargs):
+    # 普通的卷积网络，带正则化，当步长为2时进行下采样
     """Wrapper to set Darknet parameters for Convolution2D."""
-    darknet_conv_kwargs = {'kernel_regularizer': l2(5e-4)}
+    darknet_conv_kwargs = {'kernel_regularizer': l2(5e-4)}#None
+    # darknet_conv_kwargs = {'kernel_regularizer': None}  # None
     darknet_conv_kwargs['padding'] = 'valid' if kwargs.get('strides')==(2,2) else 'same'
     darknet_conv_kwargs.update(kwargs)
     return Conv2D(*args, **darknet_conv_kwargs)
 
 def DarknetConv2D_BN_Leaky(*args, **kwargs):
+    # 没有偏执，带正则项
     """Darknet Convolution2D followed by BatchNormalization and LeakyReLU."""
     no_bias_kwargs = {'use_bias': False}
     no_bias_kwargs.update(kwargs)
@@ -32,6 +35,7 @@ def DarknetConv2D_BN_Leaky(*args, **kwargs):
         LeakyReLU(alpha=0.1))
 
 def resblock_body(x, num_filters, num_blocks):
+    # 使用残差块， 1 + 2 * num_filters 为总的卷积层数
     '''A series of resblocks starting with a downsampling Convolution2D'''
     # Darknet uses left and top padding instead of 'same' mode
     x = ZeroPadding2D(((1,0),(1,0)))(x)
@@ -44,6 +48,7 @@ def resblock_body(x, num_filters, num_blocks):
     return x
 
 def darknet_body(x):
+    # darknet的主体网络52层卷积网络
     '''Darknent body having 52 Convolution2D layers'''
     x = DarknetConv2D_BN_Leaky(32, (3,3))(x)
     x = resblock_body(x, 64, 1)
@@ -54,6 +59,7 @@ def darknet_body(x):
     return x
 
 def make_last_layers(x, num_filters, out_filters):
+    # 最后检测头部，无降采采样操作
     '''6 Conv2D_BN_Leaky layers followed by a Conv2D_linear layer'''
     x = compose(
             DarknetConv2D_BN_Leaky(num_filters, (1,1)),

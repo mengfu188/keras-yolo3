@@ -6,12 +6,14 @@ Class definition of YOLO_v3 style detection model on image and video
 import colorsys
 import os
 from timeit import default_timer as timer
+import hashlib
 
 import numpy as np
 from keras import backend as K
 from keras.models import load_model
 from keras.layers import Input
 from PIL import Image, ImageFont, ImageDraw
+import matplotlib.pyplot as plt
 
 from yolo3.model import yolo_eval, yolo_body, tiny_yolo_body
 from yolo3.utils import letterbox_image
@@ -45,6 +47,7 @@ class YOLO(object):
         self.boxes, self.scores, self.classes = self.generate()
 
     def _get_class(self):
+        # 从classes_path中获得类别数目
         classes_path = os.path.expanduser(self.classes_path)
         with open(classes_path) as f:
             class_names = f.readlines()
@@ -52,6 +55,7 @@ class YOLO(object):
         return class_names
 
     def _get_anchors(self):
+        # 从anchors_path获得anchors
         anchors_path = os.path.expanduser(self.anchors_path)
         with open(anchors_path) as f:
             anchors = f.readline()
@@ -59,6 +63,7 @@ class YOLO(object):
         return np.array(anchors).reshape(-1, 2)
 
     def generate(self):
+        # 从模型文件中提取回归框，置信度和类别
         model_path = os.path.expanduser(self.model_path)
         assert model_path.endswith('.h5'), 'Keras model or weights must be a .h5 file.'
 
@@ -101,7 +106,7 @@ class YOLO(object):
 
     def detect_image(self, image):
         start = timer()
-
+        # resize图片，高和宽能够被整除
         if self.model_image_size != (None, None):
             assert self.model_image_size[0]%32 == 0, 'Multiples of 32 required'
             assert self.model_image_size[1]%32 == 0, 'Multiples of 32 required'
@@ -120,32 +125,49 @@ class YOLO(object):
             [self.boxes, self.scores, self.classes],
             feed_dict={
                 self.yolo_model.input: image_data,
-                self.input_image_shape: [image.size[1], image.size[0]],
+                self.input_image_shape: [image.size[1], image.size[0]],  # 原始图片大小
                 K.learning_phase(): 0
             })
 
         print('Found {} boxes for {}'.format(len(out_boxes), 'img'))
-
+        # 画框和名字
         font = ImageFont.truetype(font='font/FiraMono-Medium.otf',
                     size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
         thickness = (image.size[0] + image.size[1]) // 300
+        # 图片副本BGR -> RBG
+        image_2 = np.transpose(np.asarray(image),[2,0,1])
 
         for i, c in reversed(list(enumerate(out_classes))):
-            predicted_class = self.class_names[c]
+            predicted_class = self.class_names[c] # 该索引所指的类别
             box = out_boxes[i]
             score = out_scores[i]
 
             label = '{} {:.2f}'.format(predicted_class, score)
-            draw = ImageDraw.Draw(image)
-            label_size = draw.textsize(label, font)
-
+            # 四舍五入，防止框为负数
             top, left, bottom, right = box
             top = max(0, np.floor(top + 0.5).astype('int32'))
             left = max(0, np.floor(left + 0.5).astype('int32'))
             bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
             right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
             print(label, (left, top), (right, bottom))
+            # 导出图片
+            if self.export:
+                # 检查目录
+                class_dir = os.path.join(self.export_dir,predicted_class)
+                if not os.path.exists(class_dir):
+                    os.makedirs(class_dir)
+                # 待确定
+                # 第一位是高，第二位是宽
+                img = image_2[top:bottom, left:right]
+                file_name = str(hash(str(img)))
+                img_path = os.path.join(class_dir, '{}.{:.2f}.jpg'.format(file_name,score))
+                plt.imsave(img_path, img)
 
+
+            draw = ImageDraw.Draw(image)
+            label_size = draw.textsize(label, font)
+
+            # 标签写在哪？？？
             if top - label_size[1] >= 0:
                 text_origin = np.array([left, top - label_size[1]])
             else:

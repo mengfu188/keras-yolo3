@@ -6,6 +6,7 @@ from PIL import Image
 def detect_img(yolo):
     while True:
         img = input('Input image filename:')
+        # img = 'C:/Users/mengf/workspace/MobileFaceNet_TF/datasets/align_webface_112x112/0.0/Figure_0.png'
         try:
             image = Image.open(img)
         except:
@@ -59,6 +60,16 @@ if __name__ == '__main__':
     parser.add_argument(
         "--output", nargs='?', type=str, default="",
         help = "[Optional] Video output path"
+    )
+
+    parser.add_argument(
+        '--export', default=False, action='store_true',
+        help='Export detected image mode'
+    )
+
+    parser.add_argument(
+        '--export_dir', type=str,default='datasets/detected_object',
+        help='Export detected image dir to save'
     )
 
     FLAGS = parser.parse_args()
